@@ -1,0 +1,27 @@
+id = "benjmhart.folders"
+name = "Folders"
+version = "0.1.0"
+min_herdr_version = "0.9.3"
+description = "Drag agents into folders and collapse the ones you are not using; agents keep running"
+platforms = ["linux", "macos"]
+
+[[startup]]
+command = ["python3", "folders.py", "apply"]
+
+# Token metadata is not restored after a restart, and new agents need their folder tag.
+[[events]]
+on = "pane.agent_detected"
+command = ["python3", "folders.py", "apply"]
+
+[[actions]]
+id = "open"
+title = "Agent folders"
+command = ["python3", "folders.py", "open"]
+
+[[panes]]
+id = "ui"
+title = "Agent folders"
+placement = "popup"
+width = "70%"
+height = "70%"
+command = ["python3", "folders.py", "ui"]
