@@ -42,6 +42,12 @@ rows = [
 ]
 ```
 
+
+### Windows
+
+Runs on herdr's Windows build (tested on Windows 11, herdr 0.9.5: apply and the list). Windows' own `python3` is a Microsoft Store
+stub: install Python with python.org's **Python install manager**, which answers to `python3`. The list needs `python3 -m pip install windows-curses`.
+
 ## Use
 
 - **Drag** an agent onto a folder (its header or any agent in it) to move it there; drop it under *Unfiled* to unfile it.

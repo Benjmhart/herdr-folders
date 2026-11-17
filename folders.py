@@ -8,7 +8,16 @@ How it shows up in herdr: each agent pane carries a `folder` token, the Agents p
 collapsed folder are hidden there, except while you are in their workspace or one is blocked or done. The Goto
 picker, notifications and attention counts still see every agent.
 """
-import curses, json, os, socket, subprocess, sys
+import json, os, socket, subprocess, sys
+try:
+    import curses
+except ImportError:  # Windows Python ships none: the folder list needs `py -m pip install windows-curses`
+    curses = None
+
+# Windows before Python 3.15 reads files and subprocess output as cp1252, and herdr's JSON is full of emoji: run again in
+# UTF-8 mode (a child, not exec: herdr waits on this process).
+if os.name == "nt" and not sys.flags.utf8_mode and __name__ == "__main__":
+    sys.exit(subprocess.call([sys.executable, "-X", "utf8", *sys.argv]))
 
 SOURCE = "plugin:" + os.environ.get("HERDR_PLUGIN_ID", "herdr-folders")
 STATE = os.path.join(os.environ.get("HERDR_PLUGIN_STATE_DIR", "."), "folders.json")
@@ -18,11 +27,22 @@ ICON = {"working": "●", "blocked": "!", "done": "✓", "idle": "○"}
 
 # --- herdr ------------------------------------------------------------------------------------------------------
 
+def pipe(p):
+    """herdr's socket on Windows: HERDR_SOCKET_PATH is a path-shaped name in the pipe namespace (herdr 0.9.5)."""
+    return p if p.startswith("\\\\.\\pipe\\") else "\\\\.\\pipe\\" + p
+
+
 def call(method, params):
-    with socket.socket(socket.AF_UNIX) as s:
-        s.connect(os.environ["HERDR_SOCKET_PATH"])
-        s.sendall((json.dumps({"id": "folders", "method": method, "params": params}) + "\n").encode())
-        resp = json.loads(s.makefile().readline())
+    line = (json.dumps({"id": "folders", "method": method, "params": params}) + "\n").encode()
+    if os.name == "nt":  # herdr's socket on Windows is a named pipe (herdr's socket API docs)
+        with open(pipe(os.environ["HERDR_SOCKET_PATH"]), "r+b", buffering=0) as f:
+            f.write(line)
+            resp = json.loads(f.readline())
+    else:
+        with socket.socket(socket.AF_UNIX) as s:
+            s.connect(os.environ["HERDR_SOCKET_PATH"])
+            s.sendall(line)
+            resp = json.loads(s.makefile().readline())
     if "error" in resp:
         raise RuntimeError(f"{method}: {resp['error']}")
     return resp["result"]
@@ -274,6 +294,9 @@ def main(cmd):
     if cmd == "apply":
         apply(load())
     elif cmd == "ui":
+        if curses is None:
+            input("herdr-folders: the list needs curses. On Windows: py -m pip install windows-curses\n(Enter closes) ")
+            return
         curses.wrapper(ui)
     elif cmd == "open":
         call("plugin.pane.open", {"plugin_id": os.environ["HERDR_PLUGIN_ID"], "entrypoint": "ui", "focus": True})
