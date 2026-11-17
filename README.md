@@ -74,4 +74,6 @@ herdr plugin link .        # run from this checkout
 python3 test_folders.py    # the folder logic, no herdr needed
 ```
 
+CI (`.github/workflows/ci.yml`) runs the tests on Linux, macOS and Windows and links the plugin into a real herdr on every push. Tag a release only from a commit whose run is green.
+
 MIT licensed.

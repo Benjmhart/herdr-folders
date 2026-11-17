@@ -1,0 +1,50 @@
+# Unit tests on Linux, macOS and Windows, and a smoke test against a real herdr (station-maintenance fleet 38).
+# Tag a release only from a commit whose run is green.
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python test_folders.py
+  smoke:
+    # herdr's Linux build in a throwaway config: link this checkout, make two workspaces (focus, created and agent
+    # events fire), and fail on any plugin command that exited non-zero.
+    runs-on: ubuntu-latest
+    env:
+      HERDR_VERSION: v0.9.5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: herdr
+        run: |
+          mkdir -p ~/bin && curl -fsSLo ~/bin/herdr https://github.com/herdrdev/herdr/releases/download/$HERDR_VERSION/herdr-linux-x86_64
+          chmod +x ~/bin/herdr && echo ~/bin >> "$GITHUB_PATH"
+          ~/bin/herdr --version
+      - name: smoke
+        run: |
+          set -euo pipefail
+          d=$(mktemp -d /tmp/h.XXXX)
+          export XDG_CONFIG_HOME=$d/c XDG_STATE_HOME=$d/s XDG_RUNTIME_DIR=$d/r
+          mkdir -p $XDG_CONFIG_HOME $XDG_STATE_HOME $XDG_RUNTIME_DIR && chmod 700 $XDG_RUNTIME_DIR
+          herdr server > $d/server.log 2>&1 &
+          for i in $(seq 50); do herdr workspace list > /dev/null 2>&1 && break; sleep 0.2; done
+          herdr plugin link "$PWD" > /dev/null
+          herdr plugin list | tee /dev/stderr | grep -q ' enabled '
+          herdr workspace create --label one > /dev/null
+          herdr workspace create --label two > /dev/null
+          sleep 5
+          herdr plugin log list > logs.json
+          jq '.result.logs[] | {command, status, exit_code, stderr}' logs.json
+          jq -e '[.result.logs[] | select(.exit_code != null and .exit_code != 0)] | length == 0' logs.json
+          herdr server stop
